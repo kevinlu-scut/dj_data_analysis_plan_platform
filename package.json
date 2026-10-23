@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:pages": "node scripts/pages-smoke.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

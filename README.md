@@ -32,7 +32,9 @@ npm run build
 
 ## 在线部署与自动更新
 
-项目针对 Vercel 配置了同源清洗 API。将仓库导入 Vercel 后，向生产分支 `main` 推送提交会自动重新构建并更新公开网址。
+公开演示站：<https://kevinlu-scut.github.io/dj_data_analysis_plan_platform/>
+
+项目包含 GitHub Pages 自动构建工作流。向生产分支 `main` 推送提交后，GitHub Actions 会执行 Vite 构建并自动更新公开网址。
 
 ```bash
 git add .
@@ -40,6 +42,6 @@ git commit -m "描述本次修改"
 git push
 ```
 
-本地运行时，文件先在浏览器中解析，抽样数据仅发送到同一台电脑上的 Vite 服务。在线运行时，抽样数据会发送到同源的 Vercel Function 完成即时诊断；当前代码不写入数据库或持久化存储。请勿向公开演示站上传含敏感个人信息的数据。
+本地运行时，文件先在浏览器中解析，抽样数据仅发送到同一台电脑上的 Vite 服务。GitHub Pages 是静态托管，公开演示站会在浏览器内运行同一套质量诊断规则，数据不会发送到远程清洗接口。请仍避免在共享电脑上处理含敏感个人信息的数据。
 
-清洗规则位于 `server/cleaningEngine.ts`；本地接口注册位于 `server/cleaningPlugin.ts`，线上接口位于 `api/cleaning/`。新增或调整检测规则后，本地重新启动开发服务；推送到 `main` 后线上会自动生效。
+清洗规则位于 `server/cleaningEngine.ts`；本地接口注册位于 `server/cleaningPlugin.ts`，Vercel 接口位于 `api/cleaning/`。新增或调整检测规则后，本地重新启动开发服务；推送到 `main` 后 GitHub Pages 会自动重新构建。

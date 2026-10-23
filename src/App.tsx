@@ -21,6 +21,7 @@ import {
   Trash,
   WarningCircle,
 } from "@phosphor-icons/react";
+import { diagnoseDataset } from "../server/cleaningEngine";
 
 type Row = Record<string, unknown>;
 type StageId = "dataset" | "cleaning" | "task" | "strategy" | "reference" | "prompt";
@@ -381,16 +382,24 @@ function App() {
     setCleaningStatus("loading");
     setCleaningReport(null);
     setCleaningError("");
+    const requestPayload = {
+      rows,
+      fields: fields.map((field) => ({ name: field.name, role: field.role })),
+      dimensions: selectedCleaningDimensions,
+      totalRows: dataset.rowCount || rows.length,
+    };
     try {
+      if (import.meta.env.BASE_URL !== "/") {
+        const payload = diagnoseDataset(requestPayload);
+        setCleaningReport(payload);
+        setCleaningStatus("success");
+        setToast(`质量诊断完成，发现 ${payload.summary.issueCount} 项问题`);
+        return;
+      }
       const response = await fetch("/api/cleaning/diagnose", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          rows,
-          fields: fields.map((field) => ({ name: field.name, role: field.role })),
-          dimensions: selectedCleaningDimensions,
-          totalRows: dataset.rowCount || rows.length,
-        }),
+        body: JSON.stringify(requestPayload),
       });
       const payload = await response.json() as CleaningReport | { error?: string };
       if (!response.ok || !("summary" in payload)) throw new Error("error" in payload ? payload.error : "本地清洗服务未返回有效报告。");
@@ -399,7 +408,7 @@ function App() {
       setToast(`质量诊断完成，发现 ${payload.summary.issueCount} 项问题`);
     } catch (error) {
       setCleaningStatus("error");
-      setCleaningError(error instanceof Error && error.message !== "Failed to fetch" ? error.message : "无法连接本地清洗服务，请确认开发服务正在运行。");
+      setCleaningError(error instanceof Error && error.message !== "Failed to fetch" ? error.message : "无法连接清洗分析服务，请稍后重试。");
     }
   }
 
