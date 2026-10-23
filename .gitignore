@@ -1,0 +1,11 @@
+node_modules
+dist
+.DS_Store
+*.local
+vite.config.js
+vite.config.d.ts
+.vercel
+*.tsbuildinfo
+vite-dev*.log
+qa-*.png
+.edge-profile*
