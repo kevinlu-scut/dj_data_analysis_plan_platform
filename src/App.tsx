@@ -492,7 +492,7 @@ function App() {
           <div className="brand-mark" aria-hidden="true">数</div>
           <div><strong>数据新闻-数据处理平台</strong><span>LOCAL WORKBENCH</span></div>
         </div>
-        <div className="local-status"><LockKey size={15} weight="bold" /><span>数据仅在本机浏览器与本地服务间处理</span></div>
+        <div className="local-status"><LockKey size={15} weight="bold" /><span>数据仅由本地质量规则引擎处理</span></div>
         <button className="quiet-button" onClick={resetProject}><Trash size={16} />清空任务</button>
       </header>
 
@@ -543,11 +543,11 @@ function App() {
         </section>}
 
         {activeStage === "cleaning" && <section className="stage-panel">
-          <StageHeader index="02" title="先体检，再决定如何清洗" description="选择检查维度，由本地服务运行规则并返回数据质量报告、处理建议和操作代码。" />
+          <StageHeader index="02" title="先体检，再决定如何清洗" description="选择检查维度，由质量规则引擎返回数据质量报告、处理建议和操作代码。" />
           {!datasetReady ? <EmptyState icon={<Broom size={30} />} title="请先导入并确认数据" text="完成“认识数据”后，清洗引擎才能依据字段角色执行质量诊断。" /> : <>
             <div className="cleaning-dataset-bar">
               <div><Database size={19} /><span><strong>{dataset.name}</strong><small>{dataset.rowCount || rows.length} 条记录，{fields.length} 个字段</small></span></div>
-              <span className="local-engine"><LockKey size={14} />本地 Node 清洗引擎</span>
+              <span className="local-engine"><LockKey size={14} />本地质量规则引擎</span>
             </div>
             {!rows.length && <div className="inline-note"><WarningCircle size={18} />浏览器刷新后不会保留原始记录，请重新载入数据再运行诊断。已生成的报告仍可查看。</div>}
             <div className="cleaning-workspace">
@@ -563,7 +563,7 @@ function App() {
                   {cleaningStatus === "loading" ? <SpinnerGap className="spin" size={18} /> : <MagnifyingGlass size={18} />}
                   {cleaningStatus === "loading" ? "正在检测数据" : cleaningReport ? "重新运行诊断" : "运行质量诊断"}
                 </button>
-                <p className="privacy-note"><ShieldCheck size={15} />数据仅发送到当前电脑上的本地服务，不上传到外部平台。</p>
+                <p className="privacy-note"><ShieldCheck size={15} />数据仅在当前浏览器或同一电脑的本地服务中处理，不上传到外部平台。</p>
               </aside>
               <CleaningReportPanel status={cleaningStatus} error={cleaningError} report={cleaningReport} onRetry={runCleaningDiagnosis} onCopyCode={copyCleaningCode} onDownload={downloadCleaningReport} />
             </div>
@@ -690,7 +690,7 @@ function CleaningReportPanel({ status, error, report, onRetry, onCopyCode, onDow
   return <div className="cleaning-report report-ready">
     <header className="report-overview">
       <div className={`quality-score ${report.status}`}><strong>{report.summary.qualityScore}</strong><span>数据质量分</span></div>
-      <div><h3>{report.status === "healthy" ? "当前数据质量良好" : report.status === "critical" ? "存在需要优先处理的问题" : "存在需要复核的数据问题"}</h3><p>本地服务已完成 {report.dimensions.length} 个维度的规则检测。</p></div>
+      <div><h3>{report.status === "healthy" ? "当前数据质量良好" : report.status === "critical" ? "存在需要优先处理的问题" : "存在需要复核的数据问题"}</h3><p>质量规则引擎已完成 {report.dimensions.length} 个维度的检测。</p></div>
       <button className="secondary-button" onClick={onDownload}><DownloadSimple size={16} />下载报告</button>
     </header>
     <div className="report-metrics">
