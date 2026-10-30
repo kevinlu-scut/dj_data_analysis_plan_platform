@@ -128,6 +128,7 @@ const CLEANING_DIMENSIONS: Array<{ id: CleaningDimensionId; title: string; descr
 const STRATEGIES: Strategy[] = [
   { id: "descriptive", title: "分布与异常", summary: "先看中心、离散、偏态、长尾和异常值，理解数据如何分布。", condition: "至少需要一个数值字段；比较多个群体时还需要分类字段。", caution: "均值可能掩盖偏态和多峰，必须同时说明样本量与缺失处理。", phase: "analysis", methods: ["频数", "分位数", "密度", "异常值"] },
   { id: "correlation", title: "关系与相关", summary: "判断两个变量是否共同变化，并检查方向、强度与非线性。", condition: "通常需要两个数值字段；矩阵比较需要三个以上数值字段。", caution: "相关不代表因果，离群点和混杂变量可能改变关系。", phase: "analysis", methods: ["相关系数", "回归趋势", "二维密度"] },
+  { id: "categorical-association", title: "类别关联与列联分析", summary: "比较两个类别变量的联合分布，判断不同群体的构成是否存在系统差异。", condition: "需要两个类别字段；先建立列联表，再根据问题计算行百分比或列百分比，必要时使用卡方检验与标准化残差。", caution: "统计关联不代表因果；样本过少或期望频数过低时，应合并稀疏类别或改用精确检验。", phase: "analysis", methods: ["列联表", "行列百分比", "卡方检验", "标准化残差"] },
   { id: "comparison", title: "排序与组间差异", summary: "比较类别、地区或机构的高低、差距与名次。", condition: "需要可比较的指标、统一统计口径和明确基准。", caution: "排序对时间点、分母和极端值敏感，不要把微小差异写成实质差异。", phase: "analysis", methods: ["排序", "基准差", "Top / Bottom"] },
   { id: "composition", title: "构成与占比", summary: "回答整体由哪些部分构成，以及各部分占比如何变化。", condition: "类别应互斥且能够加总到同一整体。", caution: "分母必须一致；类别过多时，局部占比难以准确比较。", phase: "analysis", methods: ["占比", "层级", "整体与部分"] },
   { id: "trend", title: "时间变化", summary: "分析趋势、拐点、周期、阶段变化与群体间走势。", condition: "需要可靠的时间字段、稳定的时间间隔和口径一致的指标。", caution: "先检查断点、缺口、季节性和统计口径调整。", phase: "analysis", methods: ["趋势", "拐点", "同比 / 环比"] },
@@ -137,6 +138,7 @@ const STRATEGIES: Strategy[] = [
 
   { id: "distribution-chart", title: "分布图组", summary: "让读者看到取值分布，而不只看到一个平均数。", condition: "优先匹配“分布与异常”；多组比较可采用岭线图或分面。", caution: "小样本的密度和小提琴形状可能不稳定，应显示样本量或原始点。", phase: "visualization", methods: ["直方图", "密度图", "箱线图", "小提琴图", "岭线图", "蜂群图"], relatedAnalysis: ["descriptive", "multivariate"] },
   { id: "relation-chart", title: "关系图组", summary: "用位置、点和颜色呈现变量关系、聚类与异常点。", condition: "匹配“关系与相关”；大量重叠点可改用二维密度或六边形分箱。", caution: "趋势线要说明模型；气泡面积编码不适合精确比较。", phase: "visualization", methods: ["散点图", "气泡图", "热力图", "相关矩阵", "二维密度"], relatedAnalysis: ["correlation", "multivariate"] },
+  { id: "categorical-chart", title: "类别关系图组", summary: "用面积、长度或颜色展示两个类别变量的联合频数、比例与偏离独立性的组合。", condition: "匹配“类别关联与列联分析”；类别数量适中时优先马赛克图，精确比较时补充分组条形图或列联热力图。", caution: "马赛克图的面积不利于精确读数，类别过多时会变得拥挤；必须标明样本量、百分比口径和颜色含义。", phase: "visualization", methods: ["马赛克图", "分组条形图", "百分比堆叠条形图", "列联热力图"], relatedAnalysis: ["categorical-association"] },
   { id: "bar", title: "排序与比较图组", summary: "突出名次、组间差异、阈值和重点对象。", condition: "匹配“排序与组间差异”；类别名称较长时优先横向布局。", caution: "条形图基线通常从零开始；雷达图和圆形条形图只在特殊叙事中谨慎使用。", phase: "visualization", methods: ["排序条形图", "棒棒糖图", "克利夫兰点图", "表格"], relatedAnalysis: ["comparison"] },
   { id: "composition-chart", title: "构成与层级图组", summary: "呈现部分占整体的比例，以及分类的嵌套结构。", condition: "匹配“构成与占比”；只有少量类别时才考虑饼图或环形图。", caution: "堆叠图中的中间类别难比较，饼图和环形图不适合精确判断。", phase: "visualization", methods: ["百分比堆叠条形图", "矩形树图", "华夫图", "环形图"], relatedAnalysis: ["composition"] },
   { id: "line", title: "时间演变图组", summary: "呈现连续变化、关键拐点和群体走势。", condition: "匹配“时间变化”；组别较多时优先小多图或突出重点线。", caution: "避免双 Y 轴和意大利面式折线；先确认日期格式、间隔与缺口。", phase: "visualization", methods: ["折线图", "面积图", "小多图", "排名变化图", "周期热力图"], relatedAnalysis: ["trend", "multivariate"] },
@@ -163,6 +165,13 @@ function cellText(value: unknown) {
   if (value === null || value === undefined) return "";
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   return String(value);
+}
+
+function detectLocalFileSource(file: File) {
+  const localFile = file as File & { path?: string; webkitRelativePath?: string };
+  const exposedPath = localFile.path?.trim();
+  const relativePath = localFile.webkitRelativePath?.trim();
+  return exposedPath || relativePath || `本地文件：${file.name}`;
 }
 
 function inferType(name: string, values: unknown[]): FieldType {
@@ -231,16 +240,17 @@ function buildPrompt(
     : "";
 
   if (stage === "plan") {
-    return `# 数据新闻任务规划\n\n你是一名数据新闻分析导师。请先理解数据与研究问题，暂时不要直接生成最终图表或完整成品。\n\n${context}${agentContext}${referenceContext}\n\n## 请完成\n1. 检查字段含义、类型、统计单位和数据口径，列出必须向我确认的问题。\n2. 诊断与所选策略相关的数据质量风险，不擅自删除记录或填补缺失值。\n3. 先评估分析思路，明确指标、分母、分组、比较基准和证据边界。\n4. 再根据分析关系匹配可视化，说明每种图表的适用条件、视觉编码与替代方案。\n5. 给出可审阅的操作顺序，明确每一步的输入、处理和输出。\n\n## 输出格式\n请依次输出：数据理解、待确认问题、分析策略评估、可视化策略评估、执行计划、风险清单。`;
+    return `# 数据新闻任务规划\n\n你是一名面向新闻传播专业本科生的数据新闻分析导师。你的任务不是替学生直接完成作业，而是帮助学生把新闻问题转化为可检验的数据问题，并形成一份能够被教师审阅、被同学复现的分析方案。请先理解数据、研究问题和传播目标，暂时不要直接生成最终图表、完整代码或成品结论。\n\n${context}${agentContext}${referenceContext}\n\n## 教学与判断原则\n- 先解释“为什么这样做”，再说明“具体怎么做”。首次出现统计术语时，用一句通俗语言解释其含义。\n- 以数据证据为边界，不编造字段含义、数据来源、缺失原因或分析结果。信息不足时明确标记“待确认”。\n- 将事实描述、统计推断和因果判断分开。除非研究设计能够支持，否则不要使用“导致”“影响”等因果措辞。\n- 将新闻价值与技术选择联系起来，说明某一步如何帮助读者理解规模、差异、趋势、关联或不确定性。\n- 注意隐私、污名化、样本代表性和弱势群体风险，避免把分类标签直接解释为人物特征。\n\n## 请完成\n1. **复述问题**：用一至两句话复述你理解的研究对象、时间范围、核心指标、比较关系和目标读者，并指出问题中仍然含糊的部分。\n2. **认识数据**：检查一行数据代表什么，逐项核对所选字段的含义、角色、单位、取值范围和可能的编码方式，识别标识字段、时间字段、类别字段与数值字段。\n3. **列出待确认事项**：只提出会实质影响分析的关键问题，并说明如果不确认会造成什么偏差。不要用大量一般性问题拖延规划。\n4. **制定清洗方案**：结合质量诊断说明缺失、重复、类型冲突、异常值、类别不一致和结构问题如何影响本题。对每项处理给出判断依据、保留原值的方式和处理前后需要记录的指标，不擅自删除、填补或合并记录。\n5. **评估分析思路**：先判断所选方法是否与字段类型和研究问题匹配，再明确指标、分母、分组、聚合层级、比较基准和必要的统计检验。若涉及两个类别变量，应先建立列联表，区分频数、行百分比和列百分比，并说明卡方检验或标准化残差是否必要。\n6. **评估可视化思路**：在分析关系确认后再选择图表。说明图表要编码的变量、视觉通道、排序与尺度、读者应看见的关系、可能误读之处和一个备选方案。若使用马赛克图，说明矩形面积和颜色分别表示什么，并提供精确读数的辅助表或替代图。\n7. **设计核验节点**：给出至少三个可核验的中间结果，例如处理前后行数、列联表合计、分组汇总合计、关键比例复算或图表数据与中间表一致性。\n8. **形成执行顺序**：把任务拆成可审阅步骤。每一步写明目的、输入、处理、输出、检查方法和完成标准。\n\n## 输出格式\n请按以下标题依次输出：\n1. 问题复述与新闻价值\n2. 数据结构与字段理解\n3. 必须确认的问题\n4. 数据清洗与质量风险\n5. 分析策略评估\n6. 可视化策略评估\n7. 分步执行计划\n8. 核验节点与风险清单\n\n最后增加“请学生确认的方案摘要”，用简洁条目列出在进入执行阶段前必须确认的分析口径、清洗决定和图表选择。`;
   }
   if (stage === "execute") {
-    return `# 数据新闻任务执行\n\n请按照已经确认的方案完成任务，并让每一步都可复现、可解释、可核验。\n\n${context}${agentContext}${referenceContext}\n\n## 执行要求\n1. 保留原始数据，不覆盖输入文件；所有转换应写入新变量或新文件。\n2. 提供可运行的代码，并解释关键处理逻辑与参数选择。\n3. 记录处理前后的行数、列数、缺失值和重复值变化。\n4. 必须先生成并核验分析用中间表，再根据已确认的分析关系绘图。\n5. 图表需标注标题、单位、时间范围、数据来源、样本量和必要注释。\n6. 将描述性发现、统计推断和因果解释严格区分。\n\n## 完成标准\n代码能够运行，输出文件存在，核心数字可从中间表复算，图表能直接追溯到分析结果，结论不超出数据证据。`;
+    return `# 数据新闻任务执行\n\n你是一名面向新闻传播专业本科生的数据新闻分析执行导师和代码审阅者。请严格按照已经确认的方案完成任务，并在执行过程中帮助学生理解每一步的目的、证据和局限。所有结果都必须可复现、可解释、可核验。不得为了得到“好看”或“显著”的结果而临时更换口径。若现有信息不足以安全执行某一步，请暂停该步骤，明确缺少什么以及需要学生做出哪项决定。\n\n${context}${agentContext}${referenceContext}\n\n## 执行规则\n1. **保护原始数据**：以只读方式载入输入文件，不覆盖原文件。清洗后的数据、中间表、图表和日志分别保存，并使用清楚的文件名。\n2. **按顺序执行**：依次完成环境与文件检查、数据读取、字段核对、数据清洗、分析中间表、可视化、结论摘要和结果核验。不得跳过中间表直接绘图。\n3. **解释代码**：每个代码段之前先说明本段的目的、输入和预期输出；代码段之后报告实际结果，并用本科生能够理解的语言解释关键函数、参数和统计术语。\n4. **留下清洗证据**：记录处理前后的行数、列数、缺失值、重复值、字段类型与异常值数量。每项修改都要说明规则、受影响记录数和保留原始值的方法。未经确认，不自动删除异常值或填补缺失值。\n5. **生成可核验中间表**：先输出分析所需的分组汇总、列联表或模型输入表，检查总计、分母和样本量。涉及两个类别变量时，同时给出频数、行百分比或列百分比，并根据方案报告卡方检验、效应大小或标准化残差。\n6. **再制作图表**：图表数据必须直接来自已核验的中间表。标题应表达发现而不是只写图表类型，并标注单位、时间范围、数据来源、样本量、必要注释和不确定性。配色需兼顾色觉障碍，坐标轴与面积编码不得夸大差异。\n7. **谨慎解释**：把“数据直接显示的事实”“基于方法得到的推断”“可能的解释”和“数据无法回答的问题”分开书写。不要把相关关系写成因果关系。\n8. **主动核验**：至少独立复算三个核心数字，检查中间表合计与原始记录是否一致，检查图表值与中间表是否一致，并记录测试结果。遇到报错时说明原因、修复过程和是否影响此前结果。\n9. **尊重新闻伦理**：检查隐私泄露、小样本识别、群体污名化、选择性呈现和样本代表性问题。必要时对细分类别进行合并或匿名化，但必须说明依据。\n\n## 交付结构\n请按以下标题依次输出：\n1. 执行环境与输入文件核对\n2. 数据读取与字段核对\n3. 清洗记录及处理前后对照\n4. 分析代码与中间结果\n5. 可视化代码与图表说明\n6. 核心发现、证据边界与新闻表达建议\n7. 独立复算与核验结果\n8. 输出文件清单与复现方法\n\n## 完成标准\n- 代码从头运行无报错，依赖、路径和随机种子已说明。\n- 输出文件真实存在，文件名与保存位置清楚，原始数据没有被覆盖。\n- 每个核心数字都能追溯到中间表，每张图都能追溯到明确的数据对象。\n- 分母、样本量、单位和时间范围前后一致，结论没有超出数据证据。\n- 学生能够根据说明复述为什么采用该方法、如何检查结果，以及这一结论仍有哪些限制。`;
   }
   return `# 数据新闻结果核验\n\n请作为独立核验者检查本任务的代码、数据、图表与文字结论。不要默认此前结果正确。\n\n${context}${agentContext}\n\n## 核验任务\n1. 重新检查输入文件、字段映射、筛选条件、分组方式、指标与分母。\n2. 对照原始数据核验处理前后记录数、缺失值、重复值与异常值变化。\n3. 抽取至少三个关键结果进行独立复算，说明是否一致。\n4. 检查所选方法的适用条件，并指出任何可能改变结论的假设。\n5. 检查图表类型、坐标轴、尺度、标签、来源与视觉编码是否可能误导。\n6. 逐条核对文字结论，区分事实、推断、解释与尚未得到支持的判断。\n\n## 输出格式\n请输出：核验结论、通过项、问题项、证据位置、修正建议、修订后结论。`;
 }
 
 function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fieldSelectAllRef = useRef<HTMLInputElement>(null);
   const [activeStage, setActiveStage] = useState<StageId>("dataset");
   const [dataset, setDataset] = useState<DatasetInfo>(emptyDataset);
   const [rows, setRows] = useState<Row[]>([]);
@@ -298,6 +308,11 @@ function App() {
   const selectedAnalysisIds = selectedStrategies.filter((id) => analysisStrategies.some((item) => item.id === id));
   const selectedVisualizationIds = selectedStrategies.filter((id) => visualizationStrategies.some((item) => item.id === id));
   const selectedFieldCount = fields.filter((field) => field.selected).length;
+  const allFieldsSelected = fields.length > 0 && selectedFieldCount === fields.length;
+  useEffect(() => {
+    if (!fieldSelectAllRef.current) return;
+    fieldSelectAllRef.current.indeterminate = selectedFieldCount > 0 && selectedFieldCount < fields.length;
+  }, [fields.length, selectedFieldCount]);
   const prompt = useMemo(
     () => buildPrompt(promptStage, aiMode, dataset, fields, task, selectedStrategies, reference, cleaningReport),
     [promptStage, aiMode, dataset, fields, task, selectedStrategies, reference, cleaningReport],
@@ -331,6 +346,8 @@ function App() {
 
   async function handleFile(file: File) {
     setIsParsing(true);
+    const detectedSource = detectLocalFileSource(file);
+    setDataset((current) => ({ ...current, source: detectedSource }));
     try {
       const extension = file.name.split(".").pop()?.toLowerCase();
       if (!extension || !["csv", "xlsx", "xls", "json"].includes(extension)) {
@@ -442,6 +459,14 @@ function App() {
     setCleaningStatus("idle");
   }
 
+  function toggleAllFields() {
+    const nextSelected = !allFieldsSelected;
+    setFields((current) => current.map((field) => ({ ...field, selected: nextSelected })));
+    setCleaningReport(null);
+    setCleaningStatus("idle");
+    setToast(nextSelected ? "已选择全部字段" : "已取消选择全部字段");
+  }
+
   function toggleStrategy(id: string) {
     setSelectedStrategies((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   }
@@ -530,14 +555,14 @@ function App() {
             <h3>数据集说明</h3>
             <div className="form-grid">
               <FieldInput label="数据集名称" value={dataset.name} placeholder="例如：2023 年城市空气质量" onChange={(value) => setDataset({ ...dataset, name: value })} />
-              <FieldInput label="数据文件地址" value={dataset.source} placeholder="数据集所在的本地电脑文件地址" onChange={(value) => setDataset({ ...dataset, source: value })} />
+              <FieldInput label="数据文件地址" value={dataset.source} placeholder="选择文件后自动记录，也可手动修改" help="系统优先记录运行环境提供的真实路径；标准浏览器仅能读取文件名或相对路径。" onChange={(value) => setDataset({ ...dataset, source: value })} />
               <FieldInput label="数据的分析单位" value={dataset.unit} placeholder="一行数据代表什么" onChange={(value) => setDataset({ ...dataset, unit: value })} />
               <FieldInput label="数据集主题" value={dataset.timeRange} placeholder="数据集背后的数据新闻主题" onChange={(value) => setDataset({ ...dataset, timeRange: value })} />
             </div>
           </div>
           <div className="form-section field-section">
             <div className="section-title-row"><div><h3>字段确认</h3><p>{fields.length ? `识别到 ${fields.length} 个字段，当前选择 ${selectedFieldCount} 个` : "导入数据后将在这里显示字段"}</p></div>{dataset.fileName && <span className="file-chip"><FileText size={15} />{dataset.fileName}</span>}</div>
-            {fields.length ? <div className="field-table-wrap"><table className="field-table"><thead><tr><th>使用</th><th>字段</th><th>样例值</th><th>系统推断</th><th>你确认的角色</th></tr></thead><tbody>{fields.map((field, index) => <tr key={field.name}><td><input type="checkbox" checked={field.selected} onChange={(event) => updateField(index, { selected: event.target.checked })} aria-label={`使用字段 ${field.name}`} /></td><td><strong>{field.name}</strong></td><td className="sample-value">{field.sample || "空值"}</td><td><span className="type-label">{field.inferredType}</span></td><td><select value={field.role} onChange={(event) => updateField(index, { role: event.target.value as FieldType })}>{["数值", "分类", "时间", "地理", "文本", "标识"].map((type) => <option key={type}>{type}</option>)}</select></td></tr>)}</tbody></table></div> : <EmptyState icon={<Table size={28} />} title="尚未读取字段" text="上传文件或载入演示数据后，可在这里确认字段含义与分析角色。" />}
+            {fields.length ? <div className="field-table-wrap"><table className="field-table"><thead><tr><th><label className="field-select-all"><input ref={fieldSelectAllRef} type="checkbox" checked={allFieldsSelected} onChange={toggleAllFields} aria-label="选择或取消全部字段" /><span>{allFieldsSelected ? "取消全选" : "全选"}</span></label></th><th>字段</th><th>样例值</th><th>系统推断</th><th>你确认的角色</th></tr></thead><tbody>{fields.map((field, index) => <tr key={field.name}><td><input type="checkbox" checked={field.selected} onChange={(event) => updateField(index, { selected: event.target.checked })} aria-label={`使用字段 ${field.name}`} /></td><td><strong>{field.name}</strong></td><td className="sample-value">{field.sample || "空值"}</td><td><span className="type-label">{field.inferredType}</span></td><td><select value={field.role} onChange={(event) => updateField(index, { role: event.target.value as FieldType })}>{["数值", "分类", "时间", "地理", "文本", "标识"].map((type) => <option key={type}>{type}</option>)}</select></td></tr>)}</tbody></table></div> : <EmptyState icon={<Table size={28} />} title="尚未读取字段" text="上传文件或载入演示数据后，可在这里确认字段含义与分析角色。" />}
           </div>
           {rows.length > 0 && <details className="preview"><summary>查看前 5 条数据</summary><div className="preview-table"><table><thead><tr>{fields.map((field) => <th key={field.name}>{field.name}</th>)}</tr></thead><tbody>{rows.slice(0, 5).map((row, index) => <tr key={index}>{fields.map((field) => <td key={field.name}>{cellText(row[field.name]) || "空"}</td>)}</tr>)}</tbody></table></div></details>}
         </section>}
@@ -671,8 +696,8 @@ function StageHeader({ index, title, description }: { index: string; title: stri
   return <header className="stage-header"><span>{index}</span><div><h1>{title}</h1><p>{description}</p></div></header>;
 }
 
-function FieldInput({ label, value, placeholder, onChange }: { label: string; value: string; placeholder: string; onChange: (value: string) => void }) {
-  return <label className="text-field"><span>{label}</span><input value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} /></label>;
+function FieldInput({ label, value, placeholder, help, onChange }: { label: string; value: string; placeholder: string; help?: string; onChange: (value: string) => void }) {
+  return <label className="text-field"><span>{label}</span><input value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />{help && <small>{help}</small>}</label>;
 }
 
 function CleaningReportPanel({ status, error, report, onRetry, onCopyCode, onDownload }: {
