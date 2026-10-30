@@ -87,12 +87,15 @@ try {
   if (!mosaicStrategy) throw new Error("Mosaic plot strategy is missing");
 
   await page.getByRole("button", { name: /生成提示词/ }).click();
+  const programmingTools = await page.getByLabel("编程工具").locator("option").allTextContents();
+  if (programmingTools.join("|") !== "Python|R 语言") throw new Error(`Unexpected programming tools: ${programmingTools.join(", ")}`);
+  await page.getByLabel("编程工具").selectOption("r");
   const planPrompt = await page.locator(".prompt-document pre").innerText();
-  const planPromptExpanded = planPrompt.includes("问题复述与新闻价值") && planPrompt.includes("类别关联与列联分析") && planPrompt.includes("请学生确认的方案摘要");
+  const planPromptExpanded = planPrompt.includes("问题复述与新闻价值") && planPrompt.includes("类别关联与列联分析") && planPrompt.includes("请学生确认的方案摘要") && planPrompt.includes("编程工具：R 语言") && planPrompt.includes("ggmosaic");
   if (!planPromptExpanded) throw new Error("Planning prompt is missing the expanded teaching guidance");
   await page.getByRole("button", { name: "执行提示词" }).click();
   const executePrompt = await page.locator(".prompt-document pre").innerText();
-  const executePromptExpanded = executePrompt.includes("留下清洗证据") && executePrompt.includes("独立复算与核验结果") && executePrompt.includes("本科生");
+  const executePromptExpanded = executePrompt.includes("留下清洗证据") && executePrompt.includes("独立复算与核验结果") && executePrompt.includes("本科生") && executePrompt.includes("使用 R 语言");
   if (!executePromptExpanded) throw new Error("Execution prompt is missing the expanded teaching guidance");
 
   const result = {
@@ -102,6 +105,7 @@ try {
     fileSourceRemainsBlank: fileSource === "",
     fieldCount,
     mosaicStrategy: Boolean(mosaicStrategy),
+    programmingTools,
     planPromptExpanded,
     executePromptExpanded,
     consoleErrors,

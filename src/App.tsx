@@ -29,6 +29,7 @@ type StrategyPhase = "analysis" | "visualization";
 type FieldType = "数值" | "分类" | "时间" | "地理" | "文本" | "标识";
 type PromptStage = "plan" | "execute" | "verify";
 type AiMode = "chat" | "agent";
+type ProgrammingTool = "python" | "r";
 type CleaningDimensionId = "completeness" | "uniqueness" | "types" | "outliers" | "categories" | "structure";
 type CleaningStatus = "idle" | "loading" | "success" | "error";
 
@@ -191,6 +192,7 @@ function fieldsFromRows(rows: Row[]): Field[] {
 function buildPrompt(
   stage: PromptStage,
   mode: AiMode,
+  programmingTool: ProgrammingTool,
   dataset: DatasetInfo,
   fields: Field[],
   task: TaskInfo,
@@ -213,6 +215,7 @@ function buildPrompt(
     `分析思路：${analysisNames.length ? analysisNames.map((item) => item.title).join("、") : "待选择"}`,
     `可视化思路：${visualizationNames.length ? visualizationNames.map((item) => `${item.title}（${item.methods?.join("、")}）`).join("；") : "待选择"}`,
   ].join("\n");
+  const programmingToolName = programmingTool === "r" ? "R 语言" : "Python";
   const context = [
     `数据集：${dataset.name || "待确认"}`,
     `来源：${dataset.source || "待确认"}`,
@@ -221,6 +224,7 @@ function buildPrompt(
     `研究问题：${task.question || "待补充"}`,
     `目标读者：${task.audience}`,
     `预期成果：${task.outcome}`,
+    `编程工具：${programmingToolName}`,
     `字段：${chosenFields.length ? chosenFields.map((field) => `${field.name}（${field.role}）`).join("、") : "待选择"}`,
     cleaningContext,
     strategyContext,
@@ -228,17 +232,20 @@ function buildPrompt(
   const agentContext = mode === "agent"
     ? `\n本地执行环境：\n- 项目目录：${task.projectPath || "请先确认项目目录"}\n- 输入文件：${dataset.fileName || "请先确认输入文件"}${dataset.sheetName ? `，工作表 ${dataset.sheetName}` : ""}\n- 输出目录：${task.outputPath || "outputs/"}\n- 请实际运行代码、处理报错，并核对输出文件。`
     : "\n协作方式：请分步骤讨论。在关键假设未确认前，不要直接执行不可逆的数据处理。";
+  const programmingContext = programmingTool === "r"
+    ? "\n编程工具约束：请使用 R 语言完成数据处理与可视化，代码应能在独立的 .R 脚本中从头运行。优先采用清楚、适合教学的数据框处理流程和 ggplot2 图形语法，并记录所需软件包及版本。若制作马赛克图，可根据环境选择 ggmosaic 或 vcd，并解释面积和颜色编码。"
+    : "\n编程工具约束：请使用 Python 完成数据处理与可视化，代码应能在独立的 .py 文件或 Notebook 中从头运行。优先采用 pandas 进行数据处理，并根据图表需要使用 matplotlib、seaborn 或 plotnine，同时记录所需软件包及版本。若制作马赛克图，可使用 statsmodels.graphics.mosaic，并解释面积和颜色编码。";
   const referenceContext = reference.code.trim()
     ? `\n参考材料：\n学习目标为“${reference.goal}”。先解释哪些逻辑可以迁移，哪些变量、参数或假设必须修改。\n学生说明：${reference.note || "无补充说明"}\n参考代码或案例：\n\`\`\`\n${reference.code.trim()}\n\`\`\``
     : "";
 
   if (stage === "plan") {
-    return `# 数据新闻任务规划\n\n你是一名面向新闻传播专业本科生的数据新闻分析导师。你的任务不是替学生直接完成作业，而是帮助学生把新闻问题转化为可检验的数据问题，并形成一份能够被教师审阅、被同学复现的分析方案。请先理解数据、研究问题和传播目标，暂时不要直接生成最终图表、完整代码或成品结论。\n\n${context}${agentContext}${referenceContext}\n\n## 教学与判断原则\n- 先解释“为什么这样做”，再说明“具体怎么做”。首次出现统计术语时，用一句通俗语言解释其含义。\n- 以数据证据为边界，不编造字段含义、数据来源、缺失原因或分析结果。信息不足时明确标记“待确认”。\n- 将事实描述、统计推断和因果判断分开。除非研究设计能够支持，否则不要使用“导致”“影响”等因果措辞。\n- 将新闻价值与技术选择联系起来，说明某一步如何帮助读者理解规模、差异、趋势、关联或不确定性。\n- 注意隐私、污名化、样本代表性和弱势群体风险，避免把分类标签直接解释为人物特征。\n\n## 请完成\n1. **复述问题**：用一至两句话复述你理解的研究对象、时间范围、核心指标、比较关系和目标读者，并指出问题中仍然含糊的部分。\n2. **认识数据**：检查一行数据代表什么，逐项核对所选字段的含义、角色、单位、取值范围和可能的编码方式，识别标识字段、时间字段、类别字段与数值字段。\n3. **列出待确认事项**：只提出会实质影响分析的关键问题，并说明如果不确认会造成什么偏差。不要用大量一般性问题拖延规划。\n4. **制定清洗方案**：结合质量诊断说明缺失、重复、类型冲突、异常值、类别不一致和结构问题如何影响本题。对每项处理给出判断依据、保留原值的方式和处理前后需要记录的指标，不擅自删除、填补或合并记录。\n5. **评估分析思路**：先判断所选方法是否与字段类型和研究问题匹配，再明确指标、分母、分组、聚合层级、比较基准和必要的统计检验。若涉及两个类别变量，应先建立列联表，区分频数、行百分比和列百分比，并说明卡方检验或标准化残差是否必要。\n6. **评估可视化思路**：在分析关系确认后再选择图表。说明图表要编码的变量、视觉通道、排序与尺度、读者应看见的关系、可能误读之处和一个备选方案。若使用马赛克图，说明矩形面积和颜色分别表示什么，并提供精确读数的辅助表或替代图。\n7. **设计核验节点**：给出至少三个可核验的中间结果，例如处理前后行数、列联表合计、分组汇总合计、关键比例复算或图表数据与中间表一致性。\n8. **形成执行顺序**：把任务拆成可审阅步骤。每一步写明目的、输入、处理、输出、检查方法和完成标准。\n\n## 输出格式\n请按以下标题依次输出：\n1. 问题复述与新闻价值\n2. 数据结构与字段理解\n3. 必须确认的问题\n4. 数据清洗与质量风险\n5. 分析策略评估\n6. 可视化策略评估\n7. 分步执行计划\n8. 核验节点与风险清单\n\n最后增加“请学生确认的方案摘要”，用简洁条目列出在进入执行阶段前必须确认的分析口径、清洗决定和图表选择。`;
+    return `# 数据新闻任务规划\n\n你是一名面向新闻传播专业本科生的数据新闻分析导师。你的任务不是替学生直接完成作业，而是帮助学生把新闻问题转化为可检验的数据问题，并形成一份能够被教师审阅、被同学复现的分析方案。请先理解数据、研究问题和传播目标，暂时不要直接生成最终图表、完整代码或成品结论。\n\n${context}${agentContext}${programmingContext}${referenceContext}\n\n## 教学与判断原则\n- 先解释“为什么这样做”，再说明“具体怎么做”。首次出现统计术语时，用一句通俗语言解释其含义。\n- 以数据证据为边界，不编造字段含义、数据来源、缺失原因或分析结果。信息不足时明确标记“待确认”。\n- 将事实描述、统计推断和因果判断分开。除非研究设计能够支持，否则不要使用“导致”“影响”等因果措辞。\n- 将新闻价值与技术选择联系起来，说明某一步如何帮助读者理解规模、差异、趋势、关联或不确定性。\n- 注意隐私、污名化、样本代表性和弱势群体风险，避免把分类标签直接解释为人物特征。\n\n## 请完成\n1. **复述问题**：用一至两句话复述你理解的研究对象、时间范围、核心指标、比较关系和目标读者，并指出问题中仍然含糊的部分。\n2. **认识数据**：检查一行数据代表什么，逐项核对所选字段的含义、角色、单位、取值范围和可能的编码方式，识别标识字段、时间字段、类别字段与数值字段。\n3. **列出待确认事项**：只提出会实质影响分析的关键问题，并说明如果不确认会造成什么偏差。不要用大量一般性问题拖延规划。\n4. **制定清洗方案**：结合质量诊断说明缺失、重复、类型冲突、异常值、类别不一致和结构问题如何影响本题。对每项处理给出判断依据、保留原值的方式和处理前后需要记录的指标，不擅自删除、填补或合并记录。\n5. **评估分析思路**：先判断所选方法是否与字段类型和研究问题匹配，再明确指标、分母、分组、聚合层级、比较基准和必要的统计检验。若涉及两个类别变量，应先建立列联表，区分频数、行百分比和列百分比，并说明卡方检验或标准化残差是否必要。\n6. **评估可视化思路**：在分析关系确认后再选择图表。说明图表要编码的变量、视觉通道、排序与尺度、读者应看见的关系、可能误读之处和一个备选方案。若使用马赛克图，说明矩形面积和颜色分别表示什么，并提供精确读数的辅助表或替代图。\n7. **设计核验节点**：给出至少三个可核验的中间结果，例如处理前后行数、列联表合计、分组汇总合计、关键比例复算或图表数据与中间表一致性。\n8. **形成执行顺序**：把任务拆成可审阅步骤。每一步写明目的、输入、处理、输出、检查方法和完成标准。\n\n## 输出格式\n请按以下标题依次输出：\n1. 问题复述与新闻价值\n2. 数据结构与字段理解\n3. 必须确认的问题\n4. 数据清洗与质量风险\n5. 分析策略评估\n6. 可视化策略评估\n7. 分步执行计划\n8. 核验节点与风险清单\n\n最后增加“请学生确认的方案摘要”，用简洁条目列出在进入执行阶段前必须确认的分析口径、清洗决定和图表选择。`;
   }
   if (stage === "execute") {
-    return `# 数据新闻任务执行\n\n你是一名面向新闻传播专业本科生的数据新闻分析执行导师和代码审阅者。请严格按照已经确认的方案完成任务，并在执行过程中帮助学生理解每一步的目的、证据和局限。所有结果都必须可复现、可解释、可核验。不得为了得到“好看”或“显著”的结果而临时更换口径。若现有信息不足以安全执行某一步，请暂停该步骤，明确缺少什么以及需要学生做出哪项决定。\n\n${context}${agentContext}${referenceContext}\n\n## 执行规则\n1. **保护原始数据**：以只读方式载入输入文件，不覆盖原文件。清洗后的数据、中间表、图表和日志分别保存，并使用清楚的文件名。\n2. **按顺序执行**：依次完成环境与文件检查、数据读取、字段核对、数据清洗、分析中间表、可视化、结论摘要和结果核验。不得跳过中间表直接绘图。\n3. **解释代码**：每个代码段之前先说明本段的目的、输入和预期输出；代码段之后报告实际结果，并用本科生能够理解的语言解释关键函数、参数和统计术语。\n4. **留下清洗证据**：记录处理前后的行数、列数、缺失值、重复值、字段类型与异常值数量。每项修改都要说明规则、受影响记录数和保留原始值的方法。未经确认，不自动删除异常值或填补缺失值。\n5. **生成可核验中间表**：先输出分析所需的分组汇总、列联表或模型输入表，检查总计、分母和样本量。涉及两个类别变量时，同时给出频数、行百分比或列百分比，并根据方案报告卡方检验、效应大小或标准化残差。\n6. **再制作图表**：图表数据必须直接来自已核验的中间表。标题应表达发现而不是只写图表类型，并标注单位、时间范围、数据来源、样本量、必要注释和不确定性。配色需兼顾色觉障碍，坐标轴与面积编码不得夸大差异。\n7. **谨慎解释**：把“数据直接显示的事实”“基于方法得到的推断”“可能的解释”和“数据无法回答的问题”分开书写。不要把相关关系写成因果关系。\n8. **主动核验**：至少独立复算三个核心数字，检查中间表合计与原始记录是否一致，检查图表值与中间表是否一致，并记录测试结果。遇到报错时说明原因、修复过程和是否影响此前结果。\n9. **尊重新闻伦理**：检查隐私泄露、小样本识别、群体污名化、选择性呈现和样本代表性问题。必要时对细分类别进行合并或匿名化，但必须说明依据。\n\n## 交付结构\n请按以下标题依次输出：\n1. 执行环境与输入文件核对\n2. 数据读取与字段核对\n3. 清洗记录及处理前后对照\n4. 分析代码与中间结果\n5. 可视化代码与图表说明\n6. 核心发现、证据边界与新闻表达建议\n7. 独立复算与核验结果\n8. 输出文件清单与复现方法\n\n## 完成标准\n- 代码从头运行无报错，依赖、路径和随机种子已说明。\n- 输出文件真实存在，文件名与保存位置清楚，原始数据没有被覆盖。\n- 每个核心数字都能追溯到中间表，每张图都能追溯到明确的数据对象。\n- 分母、样本量、单位和时间范围前后一致，结论没有超出数据证据。\n- 学生能够根据说明复述为什么采用该方法、如何检查结果，以及这一结论仍有哪些限制。`;
+    return `# 数据新闻任务执行\n\n你是一名面向新闻传播专业本科生的数据新闻分析执行导师和代码审阅者。请严格按照已经确认的方案完成任务，并在执行过程中帮助学生理解每一步的目的、证据和局限。所有结果都必须可复现、可解释、可核验。不得为了得到“好看”或“显著”的结果而临时更换口径。若现有信息不足以安全执行某一步，请暂停该步骤，明确缺少什么以及需要学生做出哪项决定。\n\n${context}${agentContext}${programmingContext}${referenceContext}\n\n## 执行规则\n1. **保护原始数据**：以只读方式载入输入文件，不覆盖原文件。清洗后的数据、中间表、图表和日志分别保存，并使用清楚的文件名。\n2. **按顺序执行**：依次完成环境与文件检查、数据读取、字段核对、数据清洗、分析中间表、可视化、结论摘要和结果核验。不得跳过中间表直接绘图。\n3. **解释代码**：每个代码段之前先说明本段的目的、输入和预期输出；代码段之后报告实际结果，并用本科生能够理解的语言解释关键函数、参数和统计术语。\n4. **留下清洗证据**：记录处理前后的行数、列数、缺失值、重复值、字段类型与异常值数量。每项修改都要说明规则、受影响记录数和保留原始值的方法。未经确认，不自动删除异常值或填补缺失值。\n5. **生成可核验中间表**：先输出分析所需的分组汇总、列联表或模型输入表，检查总计、分母和样本量。涉及两个类别变量时，同时给出频数、行百分比或列百分比，并根据方案报告卡方检验、效应大小或标准化残差。\n6. **再制作图表**：图表数据必须直接来自已核验的中间表。标题应表达发现而不是只写图表类型，并标注单位、时间范围、数据来源、样本量、必要注释和不确定性。配色需兼顾色觉障碍，坐标轴与面积编码不得夸大差异。\n7. **谨慎解释**：把“数据直接显示的事实”“基于方法得到的推断”“可能的解释”和“数据无法回答的问题”分开书写。不要把相关关系写成因果关系。\n8. **主动核验**：至少独立复算三个核心数字，检查中间表合计与原始记录是否一致，检查图表值与中间表是否一致，并记录测试结果。遇到报错时说明原因、修复过程和是否影响此前结果。\n9. **尊重新闻伦理**：检查隐私泄露、小样本识别、群体污名化、选择性呈现和样本代表性问题。必要时对细分类别进行合并或匿名化，但必须说明依据。\n\n## 交付结构\n请按以下标题依次输出：\n1. 执行环境与输入文件核对\n2. 数据读取与字段核对\n3. 清洗记录及处理前后对照\n4. 分析代码与中间结果\n5. 可视化代码与图表说明\n6. 核心发现、证据边界与新闻表达建议\n7. 独立复算与核验结果\n8. 输出文件清单与复现方法\n\n## 完成标准\n- 代码从头运行无报错，依赖、路径和随机种子已说明。\n- 输出文件真实存在，文件名与保存位置清楚，原始数据没有被覆盖。\n- 每个核心数字都能追溯到中间表，每张图都能追溯到明确的数据对象。\n- 分母、样本量、单位和时间范围前后一致，结论没有超出数据证据。\n- 学生能够根据说明复述为什么采用该方法、如何检查结果，以及这一结论仍有哪些限制。`;
   }
-  return `# 数据新闻结果核验\n\n请作为独立核验者检查本任务的代码、数据、图表与文字结论。不要默认此前结果正确。\n\n${context}${agentContext}\n\n## 核验任务\n1. 重新检查输入文件、字段映射、筛选条件、分组方式、指标与分母。\n2. 对照原始数据核验处理前后记录数、缺失值、重复值与异常值变化。\n3. 抽取至少三个关键结果进行独立复算，说明是否一致。\n4. 检查所选方法的适用条件，并指出任何可能改变结论的假设。\n5. 检查图表类型、坐标轴、尺度、标签、来源与视觉编码是否可能误导。\n6. 逐条核对文字结论，区分事实、推断、解释与尚未得到支持的判断。\n\n## 输出格式\n请输出：核验结论、通过项、问题项、证据位置、修正建议、修订后结论。`;
+  return `# 数据新闻结果核验\n\n请作为独立核验者检查本任务的代码、数据、图表与文字结论。不要默认此前结果正确。\n\n${context}${agentContext}${programmingContext}\n\n## 核验任务\n1. 重新检查输入文件、字段映射、筛选条件、分组方式、指标与分母。\n2. 对照原始数据核验处理前后记录数、缺失值、重复值与异常值变化。\n3. 抽取至少三个关键结果进行独立复算，说明是否一致。\n4. 检查所选方法的适用条件，并指出任何可能改变结论的假设。\n5. 检查图表类型、坐标轴、尺度、标签、来源与视觉编码是否可能误导。\n6. 逐条核对文字结论，区分事实、推断、解释与尚未得到支持的判断。\n\n## 输出格式\n请输出：核验结论、通过项、问题项、证据位置、修正建议、修订后结论。`;
 }
 
 function App() {
@@ -257,6 +264,7 @@ function App() {
   const [reference, setReference] = useState<ReferenceInfo>(initialReference);
   const [promptStage, setPromptStage] = useState<PromptStage>("plan");
   const [aiMode, setAiMode] = useState<AiMode>("agent");
+  const [programmingTool, setProgrammingTool] = useState<ProgrammingTool>("python");
   const [checkedItems, setCheckedItems] = useState<string[]>([]);
   const [fileError, setFileError] = useState("");
   const [isParsing, setIsParsing] = useState(false);
@@ -266,7 +274,7 @@ function App() {
     const raw = localStorage.getItem("data-news-ai-workbench");
     if (!raw) return;
     try {
-      const saved = JSON.parse(raw) as { dataset?: Partial<DatasetInfo>; fields?: Field[]; task?: TaskInfo & { type?: string }; selectedCleaningDimensions?: CleaningDimensionId[]; cleaningReport?: CleaningReport; selectedStrategies?: string[]; reference?: ReferenceInfo };
+      const saved = JSON.parse(raw) as { dataset?: Partial<DatasetInfo>; fields?: Field[]; task?: TaskInfo & { type?: string }; selectedCleaningDimensions?: CleaningDimensionId[]; cleaningReport?: CleaningReport; selectedStrategies?: string[]; reference?: ReferenceInfo; programmingTool?: ProgrammingTool };
       if (saved.dataset) setDataset({ ...emptyDataset, ...saved.dataset });
       if (saved.fields) setFields(saved.fields);
       if (saved.task) {
@@ -280,14 +288,15 @@ function App() {
       }
       if (saved.selectedStrategies) setSelectedStrategies(saved.selectedStrategies.filter((id) => STRATEGIES.some((item) => item.id === id)));
       if (saved.reference) setReference(saved.reference);
+      if (saved.programmingTool === "python" || saved.programmingTool === "r") setProgrammingTool(saved.programmingTool);
     } catch {
       localStorage.removeItem("data-news-ai-workbench");
     }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("data-news-ai-workbench", JSON.stringify({ dataset, fields, task, selectedCleaningDimensions, cleaningReport, selectedStrategies, reference }));
-  }, [dataset, fields, task, selectedCleaningDimensions, cleaningReport, selectedStrategies, reference]);
+    localStorage.setItem("data-news-ai-workbench", JSON.stringify({ dataset, fields, task, selectedCleaningDimensions, cleaningReport, selectedStrategies, reference, programmingTool }));
+  }, [dataset, fields, task, selectedCleaningDimensions, cleaningReport, selectedStrategies, reference, programmingTool]);
 
   useEffect(() => {
     if (!toast) return;
@@ -307,8 +316,8 @@ function App() {
     fieldSelectAllRef.current.indeterminate = selectedFieldCount > 0 && selectedFieldCount < fields.length;
   }, [fields.length, selectedFieldCount]);
   const prompt = useMemo(
-    () => buildPrompt(promptStage, aiMode, dataset, fields, task, selectedStrategies, reference, cleaningReport),
-    [promptStage, aiMode, dataset, fields, task, selectedStrategies, reference, cleaningReport],
+    () => buildPrompt(promptStage, aiMode, programmingTool, dataset, fields, task, selectedStrategies, reference, cleaningReport),
+    [promptStage, aiMode, programmingTool, dataset, fields, task, selectedStrategies, reference, cleaningReport],
   );
   const datasetReady = Boolean(dataset.name) && fields.length > 0;
   const cleaningReady = Boolean(cleaningReport);
@@ -490,6 +499,7 @@ function App() {
     setCleaningError("");
     setSelectedStrategies([]);
     setReference(initialReference);
+    setProgrammingTool("python");
     setCheckedItems([]);
     setActiveStage("dataset");
     localStorage.removeItem("data-news-ai-workbench");
@@ -644,7 +654,10 @@ function App() {
               <button className={promptStage === "execute" ? "active" : ""} onClick={() => setPromptStage("execute")}>执行提示词</button>
               <button className={promptStage === "verify" ? "active" : ""} onClick={() => setPromptStage("verify")}>核验提示词</button>
             </div>
-            <label className="mode-switch"><span>输出模式</span><select value={aiMode} onChange={(event) => setAiMode(event.target.value as AiMode)}><option value="agent">编程智能体</option><option value="chat">对话式 AI</option></select></label>
+            <div className="prompt-settings">
+              <label className="mode-switch"><span>编程工具</span><select value={programmingTool} onChange={(event) => setProgrammingTool(event.target.value as ProgrammingTool)}><option value="python">Python</option><option value="r">R 语言</option></select></label>
+              <label className="mode-switch"><span>输出模式</span><select value={aiMode} onChange={(event) => setAiMode(event.target.value as AiMode)}><option value="agent">编程智能体</option><option value="chat">对话式 AI</option></select></label>
+            </div>
           </div>
           {aiMode === "agent" && <div className="agent-paths"><FieldInput label="本地项目目录" value={task.projectPath} placeholder="例如：C:\projects\air-quality" onChange={(value) => setTask({ ...task, projectPath: value })} /><FieldInput label="输出目录" value={task.outputPath} placeholder="例如：outputs/" onChange={(value) => setTask({ ...task, outputPath: value })} /></div>}
           <div className="prompt-workspace">
