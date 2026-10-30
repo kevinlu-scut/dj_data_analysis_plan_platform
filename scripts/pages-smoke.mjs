@@ -65,7 +65,7 @@ try {
   });
   await page.locator(".field-table").waitFor();
   const fileSource = await page.getByLabel("数据文件地址").inputValue();
-  if (fileSource !== "本地文件：category-demo.json") throw new Error(`Unexpected local file source: ${fileSource}`);
+  if (fileSource !== "") throw new Error(`File upload unexpectedly changed the source field: ${fileSource}`);
 
   const fieldCheckboxes = page.locator('input[aria-label^="使用字段"]');
   const fieldCount = await fieldCheckboxes.count();
@@ -99,7 +99,7 @@ try {
     title: await page.title(),
     qualityScore,
     dimensions,
-    fileSource,
+    fileSourceRemainsBlank: fileSource === "",
     fieldCount,
     mosaicStrategy: Boolean(mosaicStrategy),
     planPromptExpanded,

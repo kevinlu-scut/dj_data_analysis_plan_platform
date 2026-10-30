@@ -167,13 +167,6 @@ function cellText(value: unknown) {
   return String(value);
 }
 
-function detectLocalFileSource(file: File) {
-  const localFile = file as File & { path?: string; webkitRelativePath?: string };
-  const exposedPath = localFile.path?.trim();
-  const relativePath = localFile.webkitRelativePath?.trim();
-  return exposedPath || relativePath || `本地文件：${file.name}`;
-}
-
 function inferType(name: string, values: unknown[]): FieldType {
   const cleaned = values.filter((value) => value !== null && value !== undefined && String(value).trim() !== "");
   const label = name.toLowerCase();
@@ -346,8 +339,6 @@ function App() {
 
   async function handleFile(file: File) {
     setIsParsing(true);
-    const detectedSource = detectLocalFileSource(file);
-    setDataset((current) => ({ ...current, source: detectedSource }));
     try {
       const extension = file.name.split(".").pop()?.toLowerCase();
       if (!extension || !["csv", "xlsx", "xls", "json"].includes(extension)) {
@@ -555,7 +546,7 @@ function App() {
             <h3>数据集说明</h3>
             <div className="form-grid">
               <FieldInput label="数据集名称" value={dataset.name} placeholder="例如：2023 年城市空气质量" onChange={(value) => setDataset({ ...dataset, name: value })} />
-              <FieldInput label="数据文件地址" value={dataset.source} placeholder="选择文件后自动记录，也可手动修改" help="系统优先记录运行环境提供的真实路径；标准浏览器仅能读取文件名或相对路径。" onChange={(value) => setDataset({ ...dataset, source: value })} />
+              <FieldInput label="数据文件地址" value={dataset.source} placeholder="可选：手动填写本地文件地址或来源说明" onChange={(value) => setDataset({ ...dataset, source: value })} />
               <FieldInput label="数据的分析单位" value={dataset.unit} placeholder="一行数据代表什么" onChange={(value) => setDataset({ ...dataset, unit: value })} />
               <FieldInput label="数据集主题" value={dataset.timeRange} placeholder="数据集背后的数据新闻主题" onChange={(value) => setDataset({ ...dataset, timeRange: value })} />
             </div>
@@ -696,8 +687,8 @@ function StageHeader({ index, title, description }: { index: string; title: stri
   return <header className="stage-header"><span>{index}</span><div><h1>{title}</h1><p>{description}</p></div></header>;
 }
 
-function FieldInput({ label, value, placeholder, help, onChange }: { label: string; value: string; placeholder: string; help?: string; onChange: (value: string) => void }) {
-  return <label className="text-field"><span>{label}</span><input value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />{help && <small>{help}</small>}</label>;
+function FieldInput({ label, value, placeholder, onChange }: { label: string; value: string; placeholder: string; onChange: (value: string) => void }) {
+  return <label className="text-field"><span>{label}</span><input value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
 function CleaningReportPanel({ status, error, report, onRetry, onCopyCode, onDownload }: {
